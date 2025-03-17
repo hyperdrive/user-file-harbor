@@ -34,15 +34,41 @@ const DEMO_FILES: UserFile[] = [
 export const fileService = {
   async listFiles(): Promise<UserFile[]> {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/files`);
-      
-      if (!response.ok) {
-        throw new Error(`Error fetching files: ${response.statusText}`);
-      }
-      
-      return await response.json();
+      return new Promise((resolve, reject) => {
+        const eventSource = new EventSource(`${API_CONFIG.BASE_URL}/files`);
+        
+        eventSource.addEventListener('data', (event) => {
+          try {
+            const files = JSON.parse(event.data);
+            eventSource.close();
+            resolve(files);
+          } catch (parseError) {
+            eventSource.close();
+            console.error("Error parsing SSE data:", parseError);
+            reject(parseError);
+          }
+        });
+        
+        eventSource.addEventListener('error', (error) => {
+          eventSource.close();
+          console.error("SSE connection error:", error);
+          // Return demo data when SSE connection fails
+          console.info("Using demo data as fallback for SSE error");
+          resolve(DEMO_FILES);
+        });
+        
+        // Safety timeout in case the server doesn't respond
+        setTimeout(() => {
+          if (eventSource.readyState !== EventSource.CLOSED) {
+            eventSource.close();
+            console.warn("SSE connection timed out after 10 seconds");
+            console.info("Using demo data as fallback for timeout");
+            resolve(DEMO_FILES);
+          }
+        }, 10000);
+      });
     } catch (error) {
-      console.error("Failed to fetch files:", error);
+      console.error("Failed to establish SSE connection:", error);
       
       // Return demo data when API fails
       console.info("Using demo data as fallback");
