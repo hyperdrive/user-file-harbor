@@ -40,7 +40,7 @@ const FileCard = ({ file, onView, onDelete }: FileCardProps) => {
           <FileText className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Document</span>
         </div>
-        {file.images.length > 0 && (
+        {file.images && file.images.length > 0 && (
           <Badge variant="outline" className="flex items-center gap-1">
             <Image className="h-3 w-3" />
             <span className="text-xs">{file.images.length}</span>

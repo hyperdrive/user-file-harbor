@@ -39,7 +39,17 @@ export const fileService = {
         
         eventSource.addEventListener('data', (event) => {
           try {
-            const files = JSON.parse(event.data);
+            const rawFiles = JSON.parse(event.data);
+            // Process the files to ensure they match our UserFile type
+            const files: UserFile[] = rawFiles.map((file: any) => ({
+              title: file.title,
+              id: file.id?.toString() || `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              summary: file.summary,
+              text: file.text,
+              images: file.images || [],
+              metadata: file.metadata
+            }));
+            
             eventSource.close();
             resolve(files);
           } catch (parseError) {

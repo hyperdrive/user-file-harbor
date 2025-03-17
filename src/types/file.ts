@@ -9,5 +9,6 @@ export interface UserFile {
   id: string;
   summary?: string;
   text: string;
-  images: FileImage[];
+  images?: FileImage[];
+  metadata?: Record<string, any>;
 }
