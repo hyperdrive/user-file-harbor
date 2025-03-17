@@ -34,34 +34,73 @@ const DEMO_FILES: UserFile[] = [
 export const fileService = {
   async listFiles(): Promise<UserFile[]> {
     try {
+      console.log("Starting SSE connection to:", `${API_CONFIG.BASE_URL}/files`);
+      
       return new Promise((resolve, reject) => {
         const eventSource = new EventSource(`${API_CONFIG.BASE_URL}/files`);
         
+        // Log when the connection is established
+        eventSource.onopen = () => {
+          console.log("SSE connection opened successfully");
+        };
+        
+        // Listen for all message events for debugging
+        eventSource.onmessage = (event) => {
+          console.log("Received generic SSE message:", event);
+        };
+        
         eventSource.addEventListener('data', (event) => {
+          console.log("Received 'data' event:", event);
+          console.log("Event data content:", event.data);
+          
           try {
             const rawFiles = JSON.parse(event.data);
-            // Process the files to ensure they match our UserFile type
-            const files: UserFile[] = rawFiles.map((file: any) => ({
-              title: file.title,
-              id: file.id?.toString() || `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              summary: file.summary,
-              text: file.text,
-              images: file.images || [],
-              metadata: file.metadata
-            }));
+            console.log("Successfully parsed data:", rawFiles);
             
+            // Process the files to ensure they match our UserFile type
+            const files: UserFile[] = rawFiles.map((file: any) => {
+              console.log("Processing file:", file);
+              
+              // Generate a unique ID if the incoming ID is invalid
+              let fileId = file.id?.toString();
+              if (!fileId || fileId === "-1") {
+                fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                console.log(`Generated new ID for file "${file.title}":`, fileId);
+              }
+              
+              return {
+                title: file.title,
+                id: fileId,
+                summary: file.summary,
+                text: file.text,
+                images: file.images || [],
+                metadata: file.metadata
+              };
+            });
+            
+            console.log("Processed files:", files);
             eventSource.close();
+            console.log("SSE connection closed after successful data processing");
             resolve(files);
           } catch (parseError) {
-            eventSource.close();
             console.error("Error parsing SSE data:", parseError);
+            console.error("Raw data that failed to parse:", event.data);
+            eventSource.close();
+            console.log("SSE connection closed due to parse error");
             reject(parseError);
           }
         });
         
         eventSource.addEventListener('error', (error) => {
-          eventSource.close();
           console.error("SSE connection error:", error);
+          console.log("Error event details:", {
+            readyState: eventSource.readyState,
+            withCredentials: eventSource.withCredentials,
+            url: eventSource.url
+          });
+          
+          eventSource.close();
+          console.log("SSE connection closed due to error");
           // Return demo data when SSE connection fails
           console.info("Using demo data as fallback for SSE error");
           resolve(DEMO_FILES);
@@ -70,8 +109,9 @@ export const fileService = {
         // Safety timeout in case the server doesn't respond
         setTimeout(() => {
           if (eventSource.readyState !== EventSource.CLOSED) {
-            eventSource.close();
             console.warn("SSE connection timed out after 10 seconds");
+            eventSource.close();
+            console.log("SSE connection closed due to timeout");
             console.info("Using demo data as fallback for timeout");
             resolve(DEMO_FILES);
           }
