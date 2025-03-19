@@ -25,7 +25,7 @@ const FileManager = () => {
     refetch 
   } = useQuery({
     queryKey: ["files"],
-    queryFn: fileService.listFiles,
+    queryFn: fileService.listFiles
   });
 
   const uploadMutation = useMutation({
