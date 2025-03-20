@@ -1,6 +1,7 @@
 
 import { API_CONFIG } from "@/config/api";
 import { UserFile } from "@/types/file";
+import { SSE } from 'sse.js';
 
 // Demo data to use when API fails
 const DEMO_FILES: UserFile[] = [
@@ -31,85 +32,89 @@ const DEMO_FILES: UserFile[] = [
   }
 ];
 
+type SSEOptions = ConstructorParameters<typeof SSE>[1];
+async function sseFetch<T>(url: string, event: string, timeout = 5000, options: SSEOptions = {}): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const eventSource = new SSE(url, options);
+    const _timer = setTimeout(() => {
+      eventSource.close();
+      reject(new Error("SSE connection failed to open"));
+    }, timeout);
+    eventSource.addEventListener(event, (event) => {
+      clearTimeout(timeout);
+      eventSource.close();
+      resolve(JSON.parse(event.data));
+    });
+    eventSource.addEventListener('error', (error) => {
+      clearTimeout(_timer);
+      eventSource.close();
+      reject(error);
+    });
+  });
+}
+
 export const fileService = {
   async listFiles(): Promise<UserFile[]> {
     try {
-      return new Promise((resolve, reject) => {
-        const eventSource = new EventSource(`${API_CONFIG.BASE_URL}/files`);
-        eventSource.addEventListener('files', (event) => {
-          const data = JSON.parse(event.data);
-          eventSource.close();
-          resolve(data.map((file: UserFile) => ({
-            title: file.title,
-            id: file.id ?? `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            summary: file.summary,
-            text: file.text,
-            images: file.images
-          })));
-        });
-        eventSource.addEventListener('error', (error) => {
-          reject(error);
-        });
-        setTimeout(() => {
-          if (eventSource.readyState !== EventSource.CLOSED) {
-            reject(new Error("SSE connection failed to open"));
-            eventSource.close();
-          }
-        }, 5000);
-      });
+      const files = await sseFetch<UserFile[]>(`${API_CONFIG.BASE_URL}/files`, 'files');
+      return files.map((file) => ({
+        title: file.title,
+        id: file.id ?? `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        summary: file.summary,
+        text: file.text,
+        images: file.images
+      }));
     } catch (error) {
       console.error("Failed to list files:", error);
       return DEMO_FILES;
     }
   },
   
-  async uploadFile(fileData: FormData): Promise<UserFile> {
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/files`, {
-        method: "POST",
-        body: fileData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error uploading file: ${response.statusText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      console.error("Failed to upload file:", error);
-      
-      // For demo purposes, return a mock successful upload
-      const mockFile: UserFile = {
-        id: `file-${Date.now()}`,
-        title: fileData.get('title')?.toString() || "Uploaded Document",
-        text: "This is a placeholder for your uploaded content. In a real application, this would contain the actual content you uploaded.",
-        images: []
-      };
-      
-      // Add the new mock file to our demo data
-      DEMO_FILES.push(mockFile);
-      
-      return mockFile;
+  async uploadFile(fileData: FormData): Promise<number> {
+    const { token, vault_access_key_id } = await sseFetch<{ token: string, vault_access_key_id: string }>(`${API_CONFIG.BASE_URL}/files/upload_token`, 'token');
+
+    const title = fileData.get('title') as string;
+    const content = fileData.get('text') as string;
+    const blob = new Blob([content], { type: 'text/plain' });
+    
+    const response = await fetch(`https://platform.mainly.ai/api/vault/v1/${vault_access_key_id}/objects`, {
+      method: 'POST',
+      headers: {
+        'x-apikey': token,
+        'Content-Type': 'text/plain',
+        'x-filename': `${title.toLowerCase().replace(/ /g, '-')}.txt`,
+      },
+      body: blob.stream(),
+      // @ts-ignore - this is valid
+      duplex: 'half',
+      credentials: 'omit'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload file: ${response.statusText}`);
     }
+
+    const { oid } = await response.json();
+
+    const id = await sseFetch<number>(`${API_CONFIG.BASE_URL}/files`, 'created', 5000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      payload: JSON.stringify({
+        title,
+        oid
+      })
+    });
+
+    console.log('Uploaded file with ID:', id);
+
+    return id;
   },
   
   async deleteFile(fileId: string): Promise<void> {
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/files/${fileId}`, {
-        method: "DELETE",
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error deleting file: ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error(`Failed to delete file with ID ${fileId}:`, error);
-      
-      // For demo purposes, remove the file from our demo data
-      const index = DEMO_FILES.findIndex(file => file.id === fileId);
-      if (index !== -1) {
-        DEMO_FILES.splice(index, 1);
-      }
-    }
+    await sseFetch(`${API_CONFIG.BASE_URL}/files/${fileId}`, 'deleted', 5000, {
+      method: 'DELETE',
+    });
   }
 };
