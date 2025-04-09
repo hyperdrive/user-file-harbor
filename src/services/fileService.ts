@@ -32,9 +32,13 @@ const DEMO_FILES: UserFile[] = [
   }
 ];
 
+interface SSECustomEvent<T = any> extends CustomEvent<T> {
+  data: string;
+}
+
 type SSEOptions = ConstructorParameters<typeof SSE>[1];
 async function sseFetch<T>(url: string, event: string, timeout = 5000, options: SSEOptions = {},
-  callback?: { filter: string[], handler: (event: string, data: unknown) => void }
+  callback?: { filter: string[], handler: (event: SSECustomEvent, data: unknown) => void }
  ): Promise<T> {
   return new Promise((resolve, reject) => {
     const eventSource = new SSE(url, options);
@@ -79,6 +83,7 @@ export const fileService = {
   },
 
   async uploadFile(fileData: FormData, callback: Parameters<typeof sseFetch>[4]): Promise<number> {
+
     const { token, vault_access_key_id } = await sseFetch<{ token: string, vault_access_key_id: string }>(`${API_CONFIG.BASE_URL}/files/upload_token`, 'token');
 
     const title = fileData.get('title') as string;

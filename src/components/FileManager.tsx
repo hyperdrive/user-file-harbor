@@ -33,11 +33,12 @@ const FileManager = () => {
       return fileService.uploadFile(formData, {
         "filter": ['progress'],
         "handler": (event,data) => {
-         console.log(event,data)
-         if (event == 'progress') {
-          let message = (data as {message: string}).message
-          toast.info(message)
-         }
+          console.log(event,data)
+          if (event.type == 'progress') {
+            const parsedData = JSON.parse(event.data);
+            const message: string = parsedData.message;
+            toast.info(message);
+          }
         }
       })},
     onSuccess: () => {
