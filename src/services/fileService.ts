@@ -42,27 +42,54 @@ async function sseFetch<T>(url: string, event: string, timeout = 5000, options: 
  ): Promise<T> {
   return new Promise((resolve, reject) => {
     const eventSource = new SSE(url, options);
-    const _timer = setTimeout(() => {
-      eventSource.close();
-      reject(new Error("SSE connection failed to open"));
-    }, timeout);
-    eventSource.addEventListener(event, (event) => {
-      clearTimeout(timeout);
-      eventSource.close();
-      resolve(JSON.parse(event.data));
+    let timer: NodeJS.Timeout | number | null = null;
+
+    // Helper function to reset the timeout timer
+    const resetTimer = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(() => {
+        eventSource.close();
+        reject(new Error("SSE connection failed to open"));
+      }, timeout);
+    };
+
+    // Start the initial timeout
+    resetTimer();
+
+    // Listen for the main event
+    eventSource.addEventListener(event, (evt: SSECustomEvent) => {
+      // Reset the timer for subsequent events, if needed
+      resetTimer();
+      // Resolve immediately since we got our event
+      resolve(JSON.parse(evt.data));
+      // Optional: Clear the timer once resolved
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
     });
-    eventSource.addEventListener('error', (error) => {
-      clearTimeout(_timer);
+
+    // Listen for errors on the SSE
+    eventSource.addEventListener('error', (error: any) => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
       eventSource.close();
       reject(error);
     });
+
+    // Attach additional filters if provided, and have them use the same timer
     if (callback) {
-     for (const filter of callback.filter) {
-      eventSource.addEventListener(filter, callback.handler);
-     }
+      for (const filter of callback.filter) {
+        eventSource.addEventListener(filter, (evt: SSECustomEvent) => {
+          // Reset the timer for these events as well
+          resetTimer();
+          callback.handler(evt, JSON.parse(evt.data));
+        });
+      }
     }
   });
-
 }
 
 export const fileService = {
@@ -98,17 +125,16 @@ export const fileService = {
       }
     });
 
-    console.log("********" + fileCount)
     let oid = -1;
     if (fileCount > 0 && file) {
-      console.log("UPLOADING FILE!")
       console.log(file)
       const response = await fetch(`https://platform.mainly.ai/api/vault/v1/${vault_access_key_id}/objects`, {
         method: 'POST',
         headers: {
           'x-apikey': token,
           'Content-Type': 'text/plain',
-          'x-filename': `${title.toLowerCase().replace(/ /g, '-')}.txt`,
+          'x-filename': file.name,
+          //'x-filename': `${title.toLowerCase().replace(/ /g, '-')}.txt`,
         },
         body: file.stream(),
         // @ts-ignore - this is valid
