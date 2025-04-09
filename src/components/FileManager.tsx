@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fileService } from "@/services/fileService";
 import { UserFile } from "@/types/file";
@@ -16,6 +16,11 @@ const FileManager = () => {
   const [selectedFile, setSelectedFile] = useState<UserFile | null>(null);
   const [fileToDelete, setFileToDelete] = useState<UserFile | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+
+  const setUploadDialogOpenMemoized = useCallback((value: boolean) => {
+    console.log("setUploadDialogOpenMemoized called with value:", value);
+    setUploadDialogOpen(value);
+  }, []);
 
   const {
     data: files,
@@ -80,6 +85,7 @@ const FileManager = () => {
   };
 
   const handleUpload = async (formData: FormData) => {
+    console.log("handleUpload called with formData:", formData);
     await uploadMutation.mutateAsync(formData);
   };
 
@@ -93,7 +99,7 @@ const FileManager = () => {
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button onClick={() => setUploadDialogOpen(true)}>
+            <Button onClick={() => setUploadDialogOpenMemoized(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Upload File
             </Button>
@@ -130,7 +136,7 @@ const FileManager = () => {
             <p className="text-muted-foreground mb-6">
               Upload your first file to get started
             </p>
-            <Button onClick={() => setUploadDialogOpen(true)}>
+            <Button onClick={() => setUploadDialogOpenMemoized(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Upload File
             </Button>
@@ -151,11 +157,16 @@ const FileManager = () => {
         title={fileToDelete?.title || ""}
       />
 
-      <FileUpload
-        open={uploadDialogOpen}
-        onClose={() => setUploadDialogOpen(false)}
-        onUpload={handleUpload}
-      />
+      {uploadDialogOpen && (
+        <FileUpload
+          key={String(uploadDialogOpen)}
+          open={uploadDialogOpen}
+          onClose={() => {
+            setUploadDialogOpenMemoized(false);
+          }}
+          onUpload={handleUpload}
+        />
+      )}
     </div>
   );
 };

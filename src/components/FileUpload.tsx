@@ -21,6 +21,7 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -36,12 +37,13 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log("handleSubmit called");
     e.preventDefault();
     
-    if (!title || !text) {
+    if (!title) {
       toast({
         title: "Missing information",
-        description: "Please provide at least a title and text content.",
+        description: "Please provide at least a title.",
         variant: "destructive",
       });
       return;
@@ -60,20 +62,15 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
       files.forEach((file, index) => {
         formData.append(`file-${index}`, file);
       });
+  
 
       await onUpload(formData);
-      
-      // Reset form
-      setTitle("");
-      setSummary("");
-      setText("");
-      setFiles([]);
-      onClose();
       
       toast({
         title: "File uploaded",
         description: "Your file has been uploaded successfully.",
       });
+      onClose();
     } catch (error) {
       console.error("Upload error:", error);
       toast({
@@ -86,8 +83,17 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
+  const handleClose = () => {
+    setTitle("");
+    setSummary("");
+    setText("");
+    setFiles([]);
+    setIsVisible(true);
+    onClose();
+  };
+
+  return isVisible ? (
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
@@ -106,30 +112,22 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
               />
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="summary">Summary (optional)</Label>
-              <Input
-                id="summary"
-                value={summary}
-                onChange={(e) => setSummary(e.target.value)}
-                placeholder="Brief summary of the document"
-              />
-            </div>
+            {files.length === 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="text">Document Text</Label>
+                <Textarea
+                  id="text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Enter the document text"
+                  className="min-h-[120px]"
+                  required
+                />
+              </div>
+            )}
             
             <div className="grid gap-2">
-              <Label htmlFor="text">Document Text</Label>
-              <Textarea
-                id="text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Enter the document text"
-                className="min-h-[120px]"
-                required
-              />
-            </div>
-            
-            <div className="grid gap-2">
-              <Label>Images (optional)</Label>
+              <Label>Or upload your file (PDF or txt)</Label>
               <div
                 className="border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center gap-2"
                 onDragOver={(e) => e.preventDefault()}
@@ -137,20 +135,19 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
               >
                 <Upload className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground text-center">
-                  Drag and drop your images here, or click to select files
+                  Drag and drop your file here, or click to select files
                 </p>
                 <Input
-                  id="images"
+                  id="files"
                   type="file"
                   onChange={handleFileChange}
                   className="hidden"
                   multiple
-                  accept="image/*"
                 />
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => document.getElementById("images")?.click()}
+                  onClick={() => document.getElementById("files")?.click()}
                   className="mt-2"
                 >
                   Select Files
@@ -165,7 +162,7 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
           </div>
           
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={uploading}>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={uploading}>
               Cancel
             </Button>
             <Button type="submit" disabled={uploading}>
@@ -175,7 +172,7 @@ const FileUpload = ({ open, onClose, onUpload }: FileUploadProps) => {
         </form>
       </DialogContent>
     </Dialog>
-  );
+  ) : null;
 };
 
 export default FileUpload;

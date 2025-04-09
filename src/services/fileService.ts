@@ -88,40 +88,68 @@ export const fileService = {
 
     const title = fileData.get('title') as string;
     const content = fileData.get('text') as string;
-    const blob = new Blob([content], { type: 'text/plain' });
 
-    const response = await fetch(`https://platform.mainly.ai/api/vault/v1/${vault_access_key_id}/objects`, {
-      method: 'POST',
-      headers: {
-        'x-apikey': token,
-        'Content-Type': 'text/plain',
-        'x-filename': `${title.toLowerCase().replace(/ /g, '-')}.txt`,
-      },
-      body: blob.stream(),
-      // @ts-ignore - this is valid
-      duplex: 'half',
-      credentials: 'omit'
+    let fileCount = 0;
+    let file: File | undefined;
+    fileData.forEach((value, key) => {
+      if (key.startsWith('file-') && value instanceof File) {
+        fileCount++;
+        file = value;
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to upload file: ${response.statusText}`);
-    }
+    console.log("********" + fileCount)
+    let oid = -1;
+    if (fileCount > 0 && file) {
+      console.log("UPLOADING FILE!")
+      console.log(file)
+      const response = await fetch(`https://platform.mainly.ai/api/vault/v1/${vault_access_key_id}/objects`, {
+        method: 'POST',
+        headers: {
+          'x-apikey': token,
+          'Content-Type': 'text/plain',
+          'x-filename': `${title.toLowerCase().replace(/ /g, '-')}.txt`,
+        },
+        body: file.stream(),
+        // @ts-ignore - this is valid
+        duplex: 'half',
+        credentials: 'omit'
+      });
 
-    const { oid } = await response.json();
+      if (!response.ok) {
+        throw new Error(`Failed to upload file: ${response.statusText}`);
+      }
+
+      const { oid: uploadedOid } = await response.json();
+      oid = uploadedOid;
+
+    } else {
+      console.log("JUST TAKING THE TEXT")
+      oid = -1;
+    }
+    let payload = ''
+    if (oid != -1) {
+      console.log("OID != -1")
+      payload = JSON.stringify({
+        title,
+        oid
+      })
+    } else {
+      payload = JSON.stringify({
+        title,
+        text: content
+      })
+    }
 
     const id = await sseFetch<number>(`${API_CONFIG.BASE_URL}/files`, 'created', 30000, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      payload: JSON.stringify({
-        title,
-        oid
-      })
+      payload: payload
     }, callback);
 
     console.log('Uploaded file with ID:', id);
-
     return id;
   },
 
