@@ -33,7 +33,9 @@ const DEMO_FILES: UserFile[] = [
 ];
 
 type SSEOptions = ConstructorParameters<typeof SSE>[1];
-async function sseFetch<T>(url: string, event: string, timeout = 5000, options: SSEOptions = {}): Promise<T> {
+async function sseFetch<T>(url: string, event: string, timeout = 5000, options: SSEOptions = {},
+  callback?: { filter: string[], handler: (event: string, data: unknown) => void }
+ ): Promise<T> {
   return new Promise((resolve, reject) => {
     const eventSource = new SSE(url, options);
     const _timer = setTimeout(() => {
@@ -50,7 +52,13 @@ async function sseFetch<T>(url: string, event: string, timeout = 5000, options: 
       eventSource.close();
       reject(error);
     });
+    if (callback) {
+     for (const filter of callback.filter) {
+      eventSource.addEventListener(filter, callback.handler);
+     }
+    }
   });
+
 }
 
 export const fileService = {
@@ -69,14 +77,14 @@ export const fileService = {
       return DEMO_FILES;
     }
   },
-  
-  async uploadFile(fileData: FormData): Promise<number> {
+
+  async uploadFile(fileData: FormData, callback: Parameters<typeof sseFetch>[4]): Promise<number> {
     const { token, vault_access_key_id } = await sseFetch<{ token: string, vault_access_key_id: string }>(`${API_CONFIG.BASE_URL}/files/upload_token`, 'token');
 
     const title = fileData.get('title') as string;
     const content = fileData.get('text') as string;
     const blob = new Blob([content], { type: 'text/plain' });
-    
+
     const response = await fetch(`https://platform.mainly.ai/api/vault/v1/${vault_access_key_id}/objects`, {
       method: 'POST',
       headers: {
@@ -96,7 +104,7 @@ export const fileService = {
 
     const { oid } = await response.json();
 
-    const id = await sseFetch<number>(`${API_CONFIG.BASE_URL}/files`, 'created', 5000, {
+    const id = await sseFetch<number>(`${API_CONFIG.BASE_URL}/files`, 'created', 30000, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -105,13 +113,13 @@ export const fileService = {
         title,
         oid
       })
-    });
+    }, callback);
 
     console.log('Uploaded file with ID:', id);
 
     return id;
   },
-  
+
   async deleteFile(fileId: string): Promise<void> {
     await sseFetch(`${API_CONFIG.BASE_URL}/files/${fileId}`, 'deleted', 5000, {
       method: 'DELETE',

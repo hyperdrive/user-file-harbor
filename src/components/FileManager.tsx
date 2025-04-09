@@ -17,19 +17,29 @@ const FileManager = () => {
   const [fileToDelete, setFileToDelete] = useState<UserFile | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
-  const { 
-    data: files, 
-    isLoading, 
-    isError, 
+  const {
+    data: files,
+    isLoading,
+    isError,
     error,
-    refetch 
+    refetch
   } = useQuery({
     queryKey: ["files"],
     queryFn: fileService.listFiles
   });
 
   const uploadMutation = useMutation({
-    mutationFn: fileService.uploadFile,
+    mutationFn: (formData: FormData) => {
+      return fileService.uploadFile(formData, {
+        "filter": ['progress'],
+        "handler": (event,data) => {
+         console.log(event,data)
+         if (event == 'progress') {
+          let message = (data as {message: string}).message
+          toast.info(message)
+         }
+        }
+      })},
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast.success("File uploaded successfully");
